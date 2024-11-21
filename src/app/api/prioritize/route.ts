@@ -1,46 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
-import { generateEmbedding } from "@/utils/openAI";
-import { milvus, searchMilvus } from "@/utils/milvusClient";
+import { NextResponse } from 'next/server';
+import { taskVectorStore } from '@/utils/taskVectorStore';
+import { openAIEmbeddings } from '@/utils/openAI';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const { userInput } = body;
-
-    if (!userInput || typeof userInput !== "string") {
+    const { query, userId } = await req.json();
+    
+    if (!query || !userId) {
       return NextResponse.json(
-        { error: "Invalid input: userInput is required and must be a string" },
+        { error: 'Query and userId are required' },
         { status: 400 }
       );
     }
 
-    console.log("Received userInput:", userInput);
-
-    // Check if data is available in Milvus
-    const collectionInfo = await milvus.getCollectionStats("asana_tasks");
-    const numEntities = collectionInfo.data.row_count;
-
-    if (numEntities === 0) {
-      console.log("No data in Milvus collection. Awaiting Airbyte sync.");
-      return NextResponse.json(
-        { error: "Data not yet synced. Please try again later." },
-        { status: 200 }
-      );
-    }
-
-    // Generate embedding from user input
-    const embedding = await generateEmbedding(userInput);
-    console.log("Generated embedding:", embedding);
-
-    // Query Milvus for similar tasks
-    const tasks = await searchMilvus(embedding, `status == "open"`);
-    console.log("Retrieved tasks from Milvus:", tasks);
-
-    return NextResponse.json({ tasks }, { status: 200 });
+    // Get prioritized tasks
+    const prioritizedTasks = await taskVectorStore.getPrioritizedTasks(query, userId);
+    
+    // Generate a natural language summary
+    const tasksDescription = prioritizedTasks.map(task => 
+      `${task.name} (Priority Score: ${task.priorityScore}, Reasons: ${task.priorityReasons.join(', ')})`
+    ).join('\n');
+    
+    const prompt = `Based on the user's query "${query}", here are the relevant tasks in order of priority:\n${tasksDescription}\n\nPlease provide a natural language summary of these tasks and their priorities, focusing on what the user should focus on first and why.`;
+    
+    const summary = await openAIEmbeddings.generateResponse(prompt);
+    
+    return NextResponse.json({
+      tasks: prioritizedTasks,
+      summary
+    });
   } catch (error) {
-    console.error("Error in prioritize API route:", error);
+    console.error('Error in prioritize route:', error);
     return NextResponse.json(
-      { error: "Failed to process the request" },
+      { error: 'Failed to prioritize tasks' },
       { status: 500 }
     );
   }
