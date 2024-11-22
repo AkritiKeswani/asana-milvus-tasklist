@@ -1,20 +1,30 @@
-import { MilvusClient } from '@zilliz/milvus2-client-node';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 
-if (!process.env.MILVUS_HOST || !process.env.MILVUS_PORT) {
-  throw new Error('Milvus configuration missing in environment variables');
+import { MilvusNode } from '@zilliz/milvus-sdk-node';
+
+// Debug logs for environment variables
+const milvusCloudAddress = process.env.MILVUS_ADDRESS;
+const zillizCloudToken = process.env.ZILLIZ_CLOUD_TOKEN;
+
+console.log('MILVUS_ADDRESS:', milvusCloudAddress);
+console.log('ZILLIZ_CLOUD_TOKEN:', zillizCloudToken);
+
+if (!milvusCloudAddress || !zillizCloudToken) {
+  throw new Error('Missing MILVUS_ADDRESS or ZILLIZ_CLOUD_TOKEN in environment variables');
 }
 
-export const milvusClient = new MilvusClient({
-  address: `${process.env.MILVUS_HOST}:${process.env.MILVUS_PORT}`,
-  username: process.env.MILVUS_USERNAME,
-  password: process.env.MILVUS_PASSWORD,
+// Initialize and export MilvusNode client
+export const milvusClient = new MilvusNode({
+  address: milvusCloudAddress,
+  token: zillizCloudToken,
 });
 
+// Define and export COLLECTIONS
 export const COLLECTIONS = {
-  TASKS: 'asana_tasks',
-  PROJECTS: 'asana_projects',
-  TAGS: 'asana_tags',
-  CUSTOM_FIELDS: 'asana_custom_fields',
-} as const;
+  TASKS: 'tasks_collection', // Example collection name
+  USERS: 'users_collection', // Example collection name
+};
 
-export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
+// Example usage of COLLECTIONS (Debug Log)
+console.log('Available Collections:', COLLECTIONS);

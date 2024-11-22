@@ -1,7 +1,7 @@
 import { milvusClient, COLLECTIONS } from './milvusClient';
 import { openAIEmbeddings } from './openAI';
 import type { AsanaTask, TaskWithEmbedding, SearchFilters, PrioritizedTask } from '../types/asana';
-import { DataType } from '@zilliz/milvus2-client-node';
+import { DataType } from '@zilliz/milvus2-sdk-node';
 
 export class TaskVectorStore {
   private milvusClient;
@@ -18,17 +18,21 @@ export class TaskVectorStore {
   }
 
   private async createCollections() {
-    // Create tasks collection with proper schema
     await this.milvusClient.createCollection({
       collection_name: COLLECTIONS.TASKS,
       fields: [
         { name: 'id', data_type: DataType.VARCHAR, is_primary_key: true },
+        { name: 'gid', data_type: DataType.VARCHAR },
         { name: 'name', data_type: DataType.VARCHAR },
         { name: 'description', data_type: DataType.VARCHAR },
-        { name: 'due_date', data_type: DataType.VARCHAR },
-        { name: 'project_id', data_type: DataType.VARCHAR },
-        { name: 'assignee_id', data_type: DataType.VARCHAR },
+        { name: 'due_on', data_type: DataType.VARCHAR },
+        { name: 'projects', data_type: DataType.JSON },
+        { name: 'assignee', data_type: DataType.JSON },
+        { name: 'tags', data_type: DataType.JSON },
+        { name: 'custom_fields', data_type: DataType.JSON },
         { name: 'completed', data_type: DataType.BOOL },
+        { name: 'completed_at', data_type: DataType.VARCHAR },
+        { name: 'created_at', data_type: DataType.VARCHAR },
         { name: 'modified_at', data_type: DataType.VARCHAR },
         { name: 'embedding', data_type: DataType.FLOAT_VECTOR, dim: 1536 }
       ]
@@ -45,31 +49,36 @@ export class TaskVectorStore {
     });
   }
 
-  async upsertTask(task: AsanaTask, projectName?: string) {
-    const embedding = await this.generateTaskEmbedding(task, projectName);
+  async upsertTask(task: AsanaTask) {
+    const embedding = await this.generateTaskEmbedding(task);
     
     await this.milvusClient.insert({
       collection_name: COLLECTIONS.TASKS,
       data: [{
         id: task.id,
+        gid: task.gid,
         name: task.name,
         description: task.description,
-        due_date: task.due_date,
-        project_id: task.project_id,
-        assignee_id: task.assignee_id,
+        due_on: task.due_on,
+        projects: JSON.stringify(task.projects),
+        assignee: JSON.stringify(task.assignee),
+        tags: JSON.stringify(task.tags),
+        custom_fields: JSON.stringify(task.custom_fields),
         completed: task.completed,
+        completed_at: task.completed_at,
+        created_at: task.created_at,
         modified_at: task.modified_at,
         embedding
       }]
     });
   }
 
-  async generateTaskEmbedding(task: AsanaTask, projectName?: string): Promise<number[]> {
+  async generateTaskEmbedding(task: AsanaTask): Promise<number[]> {
     const contentToEmbed = [
       task.name,
       task.description,
-      projectName,
-      task.tags?.join(', '),
+      task.projects?.map(p => p.name).join(', '),
+      task.tags?.map(t => t.name).join(', '),
       task.custom_fields?.map(cf => `${cf.name}: ${cf.value}`).join(', ')
     ].filter(Boolean).join(' | ');
 
@@ -83,14 +92,14 @@ export class TaskVectorStore {
       collection_name: COLLECTIONS.TASKS,
       vector: queryEmbedding,
       limit: 10,
-      output_fields: ['id', 'name', 'description', 'due_date', 'project_id', 'assignee_id', 'completed', 'modified_at'],
+      output_fields: ['id', 'gid', 'name', 'description', 'due_on', 'projects', 'assignee', 'tags', 'custom_fields', 'completed', 'completed_at', 'created_at', 'modified_at']
     };
 
     if (Object.keys(filters).length > 0) {
       const expressions: string[] = [];
-      if (filters.projectId) expressions.push(`project_id == "${filters.projectId}"`);
-      if (filters.assigneeId) expressions.push(`assignee_id == "${filters.assigneeId}"`);
-      if (filters.dueBefore) expressions.push(`due_date <= "${filters.dueBefore}"`);
+      if (filters.projectId) expressions.push(`JSON_CONTAINS(projects, "${filters.projectId}", "$.id")`);
+      if (filters.assigneeId) expressions.push(`JSON_CONTAINS(assignee, "${filters.assigneeId}", "$.id")`);
+      if (filters.dueBefore) expressions.push(`due_on <= "${filters.dueBefore}"`);
       if (typeof filters.completed === 'boolean') expressions.push(`completed == ${filters.completed}`);
       
       if (expressions.length > 0) {
@@ -99,7 +108,13 @@ export class TaskVectorStore {
     }
 
     const searchResults = await this.milvusClient.search(searchParams);
-    return searchResults.results;
+    return searchResults.results.map(result => ({
+      ...result,
+      projects: JSON.parse(result.projects),
+      assignee: JSON.parse(result.assignee),
+      tags: JSON.parse(result.tags),
+      custom_fields: JSON.parse(result.custom_fields)
+    }));
   }
 
   async getPrioritizedTasks(query: string, userId: string): Promise<PrioritizedTask[]> {
@@ -122,34 +137,33 @@ export class TaskVectorStore {
     let score = 0;
     const reasons: string[] = [];
 
-    // Due date scoring
-    if (task.due_date) {
-      const daysUntilDue = this.getDaysUntilDue(task.due_date);
-      const dueScore = this.getDueDateScore(daysUntilDue);
-      score += dueScore;
+    if (task.due_on) {
+      const daysUntilDue = this.getDaysUntilDue(task.due_on);
+      score += this.getDueDateScore(daysUntilDue);
       
-      if (daysUntilDue < 0) {
-        reasons.push(`Overdue by ${-daysUntilDue} days`);
-      } else if (daysUntilDue === 0) {
-        reasons.push('Due today');
-      } else if (daysUntilDue <= 2) {
-        reasons.push('Due in next 2 days');
+      if (daysUntilDue < 0) reasons.push(`Overdue by ${-daysUntilDue} days`);
+      else if (daysUntilDue === 0) reasons.push('Due today');
+      else if (daysUntilDue <= 2) reasons.push('Due soon');
+    }
+
+    const priorityField = task.custom_fields?.find(cf => 
+      cf.name.toLowerCase().includes('priority')
+    );
+    
+    if (priorityField?.value) {
+      const value = priorityField.value.toLowerCase();
+      if (value.includes('high')) {
+        score += 40;
+        reasons.push('High priority');
       }
     }
 
-    // Tag scoring
-    if (task.tags) {
-      const tagScore = this.getTagScore(task.tags);
-      score += tagScore.score;
-      if (tagScore.reason) reasons.push(tagScore.reason);
-    }
-
-    // Custom fields scoring
-    if (task.custom_fields) {
-      const customScore = this.getCustomFieldScore(task.custom_fields);
-      score += customScore.score;
-      if (customScore.reason) reasons.push(customScore.reason);
-    }
+    task.tags?.forEach(tag => {
+      if (tag.name === 'urgent') {
+        score += 100;
+        reasons.push('Urgent');
+      }
+    });
 
     return { score, reasons };
   }
@@ -166,43 +180,6 @@ export class TaskVectorStore {
     if (daysUntilDue <= 2) return 80;
     if (daysUntilDue <= 7) return 70;
     return Math.max(0, 60 - daysUntilDue);
-  }
-
-  private getTagScore(tags: string[]): { score: number; reason?: string } {
-    let score = 0;
-    let reason = '';
-
-    if (tags.includes('urgent')) {
-      score += 100;
-      reason = 'Marked as urgent';
-    } else if (tags.includes('high-priority')) {
-      score += 50;
-      reason = 'High priority task';
-    }
-
-    if (tags.includes('blocked')) {
-      score -= 30;
-      reason = 'Task is blocked';
-    }
-
-    return { score, reason };
-  }
-
-  private getCustomFieldScore(customFields: AsanaCustomField[]): { score: number; reason?: string } {
-    let score = 0;
-    let reason = '';
-
-    // Add your custom field scoring logic here based on your Asana setup
-    // Example:
-    const priorityField = customFields.find(cf => cf.name.toLowerCase().includes('priority'));
-    if (priorityField && typeof priorityField.value === 'string') {
-      if (priorityField.value.toLowerCase().includes('high')) {
-        score += 40;
-        reason = 'High priority custom field';
-      }
-    }
-
-    return { score, reason };
   }
 }
 
