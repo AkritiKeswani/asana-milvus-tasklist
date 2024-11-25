@@ -1,186 +1,306 @@
-import { milvusClient, COLLECTIONS } from './milvusClient';
-import { openAIEmbeddings } from './openAI';
-import type { AsanaTask, TaskWithEmbedding, SearchFilters, PrioritizedTask } from '../types/asana';
-import { DataType } from '@zilliz/milvus2-sdk-node';
+import { milvusClient, COLLECTIONS } from './milvusClient.js';
+import type { SearchResult, InsertReq, DataType } from '@zilliz/milvus2-sdk-node';
+
+export interface TaskVector {
+  id: string;
+  title: string;
+  description: string;
+  embedding: number[];
+  workspace: string;
+  project_id?: string;
+  due_date?: string;
+  status: string;
+  priority?: number;
+  tags?: string[];
+  assignee?: string;
+  created_at: string;
+  modified_at: string;
+}
+
+export interface SearchParams {
+  embedding: number[];
+  limit?: number;
+  workspace?: string;
+  project_id?: string;
+  status?: string;
+}
 
 export class TaskVectorStore {
-  private milvusClient;
-  private embeddings;
+  private readonly collectionName = COLLECTIONS.TASKS;
 
-  constructor() {
-    this.milvusClient = milvusClient;
-    this.embeddings = openAIEmbeddings;
-  }
+  // Create the tasks collection if it doesn't exist
+  async createCollection() {
+    try {
+      const exists = await milvusClient.hasCollection({
+        collection_name: this.collectionName
+      });
 
-  async initialize() {
-    await this.createCollections();
-    await this.createIndexes();
-  }
+      if (!exists) {
+        await milvusClient.createCollection({
+          collection_name: this.collectionName,
+          fields: [
+            {
+              name: 'id',
+              description: 'Task ID',
+              data_type: DataType.VarChar,
+              max_length: 100,
+              is_primary_key: true,
+              auto_id: false
+            },
+            {
+              name: 'title',
+              description: 'Task title',
+              data_type: DataType.VarChar,
+              max_length: 500
+            },
+            {
+              name: 'description',
+              description: 'Task description',
+              data_type: DataType.VarChar,
+              max_length: 10000
+            },
+            {
+              name: 'embedding',
+              description: 'Task embedding vector',
+              data_type: DataType.FloatVector,
+              dim: 1536 // OpenAI embedding dimension
+            },
+            {
+              name: 'workspace',
+              description: 'Workspace identifier',
+              data_type: DataType.VarChar,
+              max_length: 100
+            },
+            {
+              name: 'project_id',
+              description: 'Project identifier',
+              data_type: DataType.VarChar,
+              max_length: 100
+            },
+            {
+              name: 'due_date',
+              description: 'Task due date',
+              data_type: DataType.VarChar,
+              max_length: 30
+            },
+            {
+              name: 'status',
+              description: 'Task status',
+              data_type: DataType.VarChar,
+              max_length: 50
+            },
+            {
+              name: 'priority',
+              description: 'Task priority',
+              data_type: DataType.Int16
+            },
+            {
+              name: 'tags',
+              description: 'Task tags',
+              data_type: DataType.Array,
+              element_type: DataType.VarChar,
+              max_capacity: 10
+            },
+            {
+              name: 'assignee',
+              description: 'Task assignee',
+              data_type: DataType.VarChar,
+              max_length: 100
+            },
+            {
+              name: 'created_at',
+              description: 'Creation timestamp',
+              data_type: DataType.VarChar,
+              max_length: 30
+            },
+            {
+              name: 'modified_at',
+              description: 'Last modification timestamp',
+              data_type: DataType.VarChar,
+              max_length: 30
+            }
+          ]
+        });
 
-  private async createCollections() {
-    await this.milvusClient.createCollection({
-      collection_name: COLLECTIONS.TASKS,
-      fields: [
-        { name: 'id', data_type: DataType.VARCHAR, is_primary_key: true },
-        { name: 'gid', data_type: DataType.VARCHAR },
-        { name: 'name', data_type: DataType.VARCHAR },
-        { name: 'description', data_type: DataType.VARCHAR },
-        { name: 'due_on', data_type: DataType.VARCHAR },
-        { name: 'projects', data_type: DataType.JSON },
-        { name: 'assignee', data_type: DataType.JSON },
-        { name: 'tags', data_type: DataType.JSON },
-        { name: 'custom_fields', data_type: DataType.JSON },
-        { name: 'completed', data_type: DataType.BOOL },
-        { name: 'completed_at', data_type: DataType.VARCHAR },
-        { name: 'created_at', data_type: DataType.VARCHAR },
-        { name: 'modified_at', data_type: DataType.VARCHAR },
-        { name: 'embedding', data_type: DataType.FLOAT_VECTOR, dim: 1536 }
-      ]
-    });
-  }
+        // Create index on the embedding field
+        await milvusClient.createIndex({
+          collection_name: this.collectionName,
+          field_name: 'embedding',
+          index_type: 'IVF_FLAT',
+          metric_type: 'L2',
+          params: { nlist: 1024 }
+        });
 
-  private async createIndexes() {
-    await this.milvusClient.createIndex({
-      collection_name: COLLECTIONS.TASKS,
-      field_name: 'embedding',
-      index_type: 'IVF_FLAT',
-      metric_type: 'L2',
-      params: { nlist: 1024 }
-    });
-  }
-
-  async upsertTask(task: AsanaTask) {
-    const embedding = await this.generateTaskEmbedding(task);
-    
-    await this.milvusClient.insert({
-      collection_name: COLLECTIONS.TASKS,
-      data: [{
-        id: task.id,
-        gid: task.gid,
-        name: task.name,
-        description: task.description,
-        due_on: task.due_on,
-        projects: JSON.stringify(task.projects),
-        assignee: JSON.stringify(task.assignee),
-        tags: JSON.stringify(task.tags),
-        custom_fields: JSON.stringify(task.custom_fields),
-        completed: task.completed,
-        completed_at: task.completed_at,
-        created_at: task.created_at,
-        modified_at: task.modified_at,
-        embedding
-      }]
-    });
-  }
-
-  async generateTaskEmbedding(task: AsanaTask): Promise<number[]> {
-    const contentToEmbed = [
-      task.name,
-      task.description,
-      task.projects?.map(p => p.name).join(', '),
-      task.tags?.map(t => t.name).join(', '),
-      task.custom_fields?.map(cf => `${cf.name}: ${cf.value}`).join(', ')
-    ].filter(Boolean).join(' | ');
-
-    return await this.embeddings.embedText(contentToEmbed);
-  }
-
-  async searchTasks(query: string, filters: SearchFilters = {}): Promise<AsanaTask[]> {
-    const queryEmbedding = await this.embeddings.embedQuery(query);
-    
-    const searchParams: any = {
-      collection_name: COLLECTIONS.TASKS,
-      vector: queryEmbedding,
-      limit: 10,
-      output_fields: ['id', 'gid', 'name', 'description', 'due_on', 'projects', 'assignee', 'tags', 'custom_fields', 'completed', 'completed_at', 'created_at', 'modified_at']
-    };
-
-    if (Object.keys(filters).length > 0) {
-      const expressions: string[] = [];
-      if (filters.projectId) expressions.push(`JSON_CONTAINS(projects, "${filters.projectId}", "$.id")`);
-      if (filters.assigneeId) expressions.push(`JSON_CONTAINS(assignee, "${filters.assigneeId}", "$.id")`);
-      if (filters.dueBefore) expressions.push(`due_on <= "${filters.dueBefore}"`);
-      if (typeof filters.completed === 'boolean') expressions.push(`completed == ${filters.completed}`);
-      
-      if (expressions.length > 0) {
-        searchParams.expr = expressions.join(' && ');
+        console.log(`Collection ${this.collectionName} created successfully`);
       }
-    }
 
-    const searchResults = await this.milvusClient.search(searchParams);
-    return searchResults.results.map(result => ({
-      ...result,
-      projects: JSON.parse(result.projects),
-      assignee: JSON.parse(result.assignee),
-      tags: JSON.parse(result.tags),
-      custom_fields: JSON.parse(result.custom_fields)
-    }));
+      return true;
+    } catch (error) {
+      console.error('Error creating collection:', error);
+      throw error;
+    }
   }
 
-  async getPrioritizedTasks(query: string, userId: string): Promise<PrioritizedTask[]> {
-    const tasks = await this.searchTasks(query, { 
-      assigneeId: userId,
-      completed: false 
-    });
-    
-    return tasks.map(task => {
-      const priorityScore = this.calculatePriorityScore(task);
-      return {
-        ...task,
-        priorityScore: priorityScore.score,
-        priorityReasons: priorityScore.reasons
+  // Insert tasks into the collection
+  async insertTasks(tasks: TaskVector[]) {
+    try {
+      const insertReq: InsertReq = {
+        collection_name: this.collectionName,
+        fields_data: tasks.map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          embedding: task.embedding,
+          workspace: task.workspace,
+          project_id: task.project_id || '',
+          due_date: task.due_date || '',
+          status: task.status,
+          priority: task.priority || 0,
+          tags: task.tags || [],
+          assignee: task.assignee || '',
+          created_at: task.created_at,
+          modified_at: task.modified_at
+        }))
       };
-    }).sort((a, b) => b.priorityScore - a.priorityScore);
+
+      const insertResponse = await milvusClient.insert(insertReq);
+      return insertResponse;
+    } catch (error) {
+      console.error('Error inserting tasks:', error);
+      throw error;
+    }
   }
 
-  private calculatePriorityScore(task: AsanaTask): { score: number; reasons: string[] } {
-    let score = 0;
-    const reasons: string[] = [];
+  // Search for similar tasks
+  async searchSimilarTasks({
+    embedding,
+    limit = 5,
+    workspace,
+    project_id,
+    status
+  }: SearchParams): Promise<SearchResult[]> {
+    try {
+      let expr = '';
+      if (workspace) {
+        expr += `workspace == "${workspace}"`;
+      }
+      if (project_id) {
+        expr += expr ? ` && project_id == "${project_id}"` : `project_id == "${project_id}"`;
+      }
+      if (status) {
+        expr += expr ? ` && status == "${status}"` : `status == "${status}"`;
+      }
 
-    if (task.due_on) {
-      const daysUntilDue = this.getDaysUntilDue(task.due_on);
-      score += this.getDueDateScore(daysUntilDue);
+      const searchResponse = await milvusClient.search({
+        collection_name: this.collectionName,
+        vector: embedding,
+        limit,
+        output_fields: [
+          'id',
+          'title',
+          'description',
+          'workspace',
+          'project_id',
+          'due_date',
+          'status',
+          'priority',
+          'tags',
+          'assignee',
+          'created_at',
+          'modified_at'
+        ],
+        expr: expr || undefined
+      });
+
+      return searchResponse.results;
+    } catch (error) {
+      console.error('Error searching similar tasks:', error);
+      throw error;
+    }
+  }
+
+  // Delete tasks by IDs
+  async deleteTasks(taskIds: string[]) {
+    try {
+      const expr = `id in [${taskIds.map(id => `"${id}"`).join(',')}]`;
+      const deleteResponse = await milvusClient.delete({
+        collection_name: this.collectionName,
+        expr
+      });
+      return deleteResponse;
+    } catch (error) {
+      console.error('Error deleting tasks:', error);
+      throw error;
+    }
+  }
+
+  // Update task by ID
+  async updateTask(taskId: string, updateData: Partial<TaskVector>) {
+    try {
+      const expr = `id == "${taskId}"`;
       
-      if (daysUntilDue < 0) reasons.push(`Overdue by ${-daysUntilDue} days`);
-      else if (daysUntilDue === 0) reasons.push('Due today');
-      else if (daysUntilDue <= 2) reasons.push('Due soon');
-    }
+      // Remove undefined values and id from update data
+      const cleanUpdateData = Object.entries(updateData).reduce((acc, [key, value]) => {
+        if (value !== undefined && key !== 'id') {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, any>);
 
-    const priorityField = task.custom_fields?.find(cf => 
-      cf.name.toLowerCase().includes('priority')
-    );
-    
-    if (priorityField?.value) {
-      const value = priorityField.value.toLowerCase();
-      if (value.includes('high')) {
-        score += 40;
-        reasons.push('High priority');
+      if (Object.keys(cleanUpdateData).length > 0) {
+        await milvusClient.delete({
+          collection_name: this.collectionName,
+          expr
+        });
+
+        // Insert updated task
+        await this.insertTasks([{
+          id: taskId,
+          ...cleanUpdateData
+        } as TaskVector]);
       }
+
+      return true;
+    } catch (error) {
+      console.error('Error updating task:', error);
+      throw error;
     }
-
-    task.tags?.forEach(tag => {
-      if (tag.name === 'urgent') {
-        score += 100;
-        reasons.push('Urgent');
-      }
-    });
-
-    return { score, reasons };
   }
 
-  private getDaysUntilDue(dueDate: string): number {
-    const due = new Date(dueDate);
-    const today = new Date();
-    return Math.ceil((due.getTime() - today.getTime()) / (1000 * 3600 * 24));
-  }
+  // Get task by ID
+  async getTaskById(taskId: string): Promise<TaskVector | null> {
+    try {
+      const expr = `id == "${taskId}"`;
+      const response = await milvusClient.query({
+        collection_name: this.collectionName,
+        expr,
+        output_fields: [
+          'id',
+          'title',
+          'description',
+          'embedding',
+          'workspace',
+          'project_id',
+          'due_date',
+          'status',
+          'priority',
+          'tags',
+          'assignee',
+          'created_at',
+          'modified_at'
+        ]
+      });
 
-  private getDueDateScore(daysUntilDue: number): number {
-    if (daysUntilDue < 0) return 100;
-    if (daysUntilDue === 0) return 90;
-    if (daysUntilDue <= 2) return 80;
-    if (daysUntilDue <= 7) return 70;
-    return Math.max(0, 60 - daysUntilDue);
+      if (response.data.length === 0) {
+        return null;
+      }
+
+      return response.data[0] as TaskVector;
+    } catch (error) {
+      console.error('Error getting task by ID:', error);
+      throw error;
+    }
   }
 }
 
-export const taskVectorStore = new TaskVectorStore();
+export default TaskVectorStore;

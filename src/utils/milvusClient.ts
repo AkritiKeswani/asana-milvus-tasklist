@@ -1,30 +1,47 @@
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
+import { MilvusClient } from '@zilliz/milvus2-sdk-node';
+import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
 
-import { MilvusNode } from '@zilliz/milvus-sdk-node';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// Debug logs for environment variables
-const milvusCloudAddress = process.env.MILVUS_ADDRESS;
-const zillizCloudToken = process.env.ZILLIZ_CLOUD_TOKEN;
+// Load environment variables from .env.local
+dotenv.config({ path: resolve(__dirname, '../../.env.local') });
 
-console.log('MILVUS_ADDRESS:', milvusCloudAddress);
-console.log('ZILLIZ_CLOUD_TOKEN:', zillizCloudToken);
+// Constants for collection names
+export const COLLECTIONS = {
+  TASKS: 'tasks_collection',
+  USERS: 'users_collection',
+} as const;
 
-if (!milvusCloudAddress || !zillizCloudToken) {
-  throw new Error('Missing MILVUS_ADDRESS or ZILLIZ_CLOUD_TOKEN in environment variables');
+// Type for collection names
+export type CollectionName = typeof COLLECTIONS[keyof typeof COLLECTIONS];
+
+// Environment variable validation
+const milvusUri = process.env.MILVUS_URI;
+const zillizToken = process.env.ZILLIZ_TOKEN;
+
+if (!milvusUri || !zillizToken) {
+  throw new Error(
+    'Missing required environment variables: MILVUS_URI or ZILLIZ_TOKEN'
+  );
 }
 
-// Initialize and export MilvusNode client
-export const milvusClient = new MilvusNode({
-  address: milvusCloudAddress,
-  token: zillizCloudToken,
+// Initialize and export Milvus client
+export const milvusClient = new MilvusClient({
+  address: milvusUri,
+  token: zillizToken,
+  ssl: true
 });
 
-// Define and export COLLECTIONS
-export const COLLECTIONS = {
-  TASKS: 'tasks_collection', // Example collection name
-  USERS: 'users_collection', // Example collection name
-};
-
-// Example usage of COLLECTIONS (Debug Log)
-console.log('Available Collections:', COLLECTIONS);
+// Utility function to check collection existence
+export async function ensureCollection(collectionName: CollectionName): Promise<boolean> {
+  try {
+    const collections = await milvusClient.listCollections();
+    return collections.includes(collectionName);
+  } catch (error) {
+    console.error(`Error checking collection ${collectionName}:`, error);
+    throw error;
+  }
+}

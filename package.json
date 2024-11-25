@@ -2,15 +2,15 @@
   "name": "asana-milvus-tasklist",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:milvus": "NODE_OPTIONS='--loader ts-node/esm --no-warnings' ts-node --esm scripts/testMilvus.ts"
+    "test:milvus": "tsx scripts/test-milvus.ts"
   },
   "dependencies": {
-    "@zilliz/milvus-sdk-node": "^1.0.0",
     "@zilliz/milvus2-sdk-node": "^2.4.9",
     "dotenv": "^16.4.5",
     "next": "^15.0.3",
@@ -19,7 +19,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20.17.6",
+    "@types/node": "^20.17.8",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.20",
@@ -29,6 +29,7 @@
     "postcss-preset-env": "^10.1.1",
     "tailwindcss": "^3.4.15",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
