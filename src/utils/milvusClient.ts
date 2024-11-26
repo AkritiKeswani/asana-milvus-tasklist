@@ -34,14 +34,3 @@ export const milvusClient = new MilvusClient({
   token: zillizToken,
   ssl: true
 });
-
-// Utility function to check collection existence
-export async function ensureCollection(collectionName: CollectionName): Promise<boolean> {
-  try {
-    const collections = await milvusClient.listCollections();
-    return collections.includes(collectionName);
-  } catch (error) {
-    console.error(`Error checking collection ${collectionName}:`, error);
-    throw error;
-  }
-}

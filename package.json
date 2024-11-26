@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:milvus": "tsx scripts/test-milvus.ts"
+    "test:milvus": "tsx scripts/test-milvus.ts",
+    "test:data": "tsx scripts/test-milvus-data.ts"
   },
   "dependencies": {
     "@zilliz/milvus2-sdk-node": "^2.4.9",

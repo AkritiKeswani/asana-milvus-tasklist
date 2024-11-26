@@ -1,4 +1,4 @@
-import { milvusClient, COLLECTIONS, ensureCollection } from './milvusClient.js';
+import { milvusClient, COLLECTIONS } from '../src/utils/milvusClient';
 
 export async function testMilvusConnection() {
   try {

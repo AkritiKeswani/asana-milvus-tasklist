@@ -1,41 +1,73 @@
-import { milvusClient, COLLECTIONS } from './milvusClient.js';
-import type { SearchResult, InsertReq, DataType } from '@zilliz/milvus2-sdk-node';
+import { MilvusClient, DataType, SearchResult } from '@zilliz/milvus2-sdk-node';
+import { milvusClient, COLLECTIONS } from './milvusClient';
+import { openAIEmbeddings } from './openAI';
 
 export interface TaskVector {
   id: string;
-  title: string;
+  name: string;
   description: string;
   embedding: number[];
   workspace: string;
+  userId: string;
   project_id?: string;
   due_date?: string;
   status: string;
   priority?: number;
-  tags?: string[];
   assignee?: string;
   created_at: string;
   modified_at: string;
 }
 
-export interface SearchParams {
-  embedding: number[];
-  limit?: number;
-  workspace?: string;
-  project_id?: string;
-  status?: string;
+export interface PrioritizedTask extends Omit<TaskVector, 'embedding'> {
+  priorityScore: number;
+  priorityReasons: string[];
 }
 
-export class TaskVectorStore {
+class TaskVectorStore {
   private readonly collectionName = COLLECTIONS.TASKS;
+  private static instance: TaskVectorStore;
 
-  // Create the tasks collection if it doesn't exist
-  async createCollection() {
+  private constructor() {}
+
+  public static getInstance(): TaskVectorStore {
+    if (!TaskVectorStore.instance) {
+      TaskVectorStore.instance = new TaskVectorStore();
+    }
+    return TaskVectorStore.instance;
+  }
+
+  // Check if collection exists
+  async collectionExists(): Promise<boolean> {
     try {
-      const exists = await milvusClient.hasCollection({
+      return await milvusClient.hasCollection({
         collection_name: this.collectionName
       });
+    } catch (error) {
+      console.error('Error checking collection existence:', error);
+      throw error;
+    }
+  }
+
+  // Get collection statistics
+  async getCollectionStats() {
+    try {
+      const stats = await milvusClient.getCollectionStatistics({
+        collection_name: this.collectionName
+      });
+      return stats;
+    } catch (error) {
+      console.error('Error getting collection statistics:', error);
+      throw error;
+    }
+  }
+
+  // Create collection if it doesn't exist
+  async createCollection(): Promise<boolean> {
+    try {
+      const exists = await this.collectionExists();
 
       if (!exists) {
+        console.log('Creating collection:', this.collectionName);
         await milvusClient.createCollection({
           collection_name: this.collectionName,
           fields: [
@@ -48,8 +80,8 @@ export class TaskVectorStore {
               auto_id: false
             },
             {
-              name: 'title',
-              description: 'Task title',
+              name: 'name',
+              description: 'Task name',
               data_type: DataType.VarChar,
               max_length: 500
             },
@@ -63,11 +95,17 @@ export class TaskVectorStore {
               name: 'embedding',
               description: 'Task embedding vector',
               data_type: DataType.FloatVector,
-              dim: 1536 // OpenAI embedding dimension
+              dim: 1536
             },
             {
               name: 'workspace',
               description: 'Workspace identifier',
+              data_type: DataType.VarChar,
+              max_length: 100
+            },
+            {
+              name: 'userId',
+              description: 'User identifier',
               data_type: DataType.VarChar,
               max_length: 100
             },
@@ -78,28 +116,21 @@ export class TaskVectorStore {
               max_length: 100
             },
             {
-              name: 'due_date',
-              description: 'Task due date',
-              data_type: DataType.VarChar,
-              max_length: 30
-            },
-            {
               name: 'status',
               description: 'Task status',
               data_type: DataType.VarChar,
               max_length: 50
             },
             {
-              name: 'priority',
-              description: 'Task priority',
-              data_type: DataType.Int16
+              name: 'due_date',
+              description: 'Due date',
+              data_type: DataType.VarChar,
+              max_length: 30
             },
             {
-              name: 'tags',
-              description: 'Task tags',
-              data_type: DataType.Array,
-              element_type: DataType.VarChar,
-              max_capacity: 10
+              name: 'priority',
+              description: 'Priority level',
+              data_type: DataType.Int16
             },
             {
               name: 'assignee',
@@ -122,16 +153,23 @@ export class TaskVectorStore {
           ]
         });
 
-        // Create index on the embedding field
+        // Create index on embedding field
         await milvusClient.createIndex({
           collection_name: this.collectionName,
           field_name: 'embedding',
-          index_type: 'IVF_FLAT',
-          metric_type: 'L2',
-          params: { nlist: 1024 }
+          extra_params: {
+            index_type: 'IVF_FLAT',
+            metric_type: 'L2',
+            params: { nlist: 1024 }
+          }
         });
 
-        console.log(`Collection ${this.collectionName} created successfully`);
+        // Load collection into memory
+        await milvusClient.loadCollection({
+          collection_name: this.collectionName
+        });
+
+        console.log('Collection created successfully');
       }
 
       return true;
@@ -141,75 +179,53 @@ export class TaskVectorStore {
     }
   }
 
-  // Insert tasks into the collection
-  async insertTasks(tasks: TaskVector[]) {
+  // Insert a single task
+  async insertTask(task: TaskVector) {
     try {
-      const insertReq: InsertReq = {
+      const response = await milvusClient.insert({
         collection_name: this.collectionName,
-        fields_data: tasks.map(task => ({
+        fields_data: [{
           id: task.id,
-          title: task.title,
+          name: task.name,
           description: task.description,
           embedding: task.embedding,
           workspace: task.workspace,
+          userId: task.userId,
           project_id: task.project_id || '',
-          due_date: task.due_date || '',
           status: task.status,
+          due_date: task.due_date || '',
           priority: task.priority || 0,
-          tags: task.tags || [],
           assignee: task.assignee || '',
           created_at: task.created_at,
           modified_at: task.modified_at
-        }))
-      };
+        }]
+      });
 
-      const insertResponse = await milvusClient.insert(insertReq);
-      return insertResponse;
+      return response;
     } catch (error) {
-      console.error('Error inserting tasks:', error);
+      console.error('Error inserting task:', error);
       throw error;
     }
   }
 
   // Search for similar tasks
-  async searchSimilarTasks({
-    embedding,
-    limit = 5,
-    workspace,
-    project_id,
-    status
-  }: SearchParams): Promise<SearchResult[]> {
+  async searchSimilarTasks(embedding: number[], limit: number = 5): Promise<SearchResult[]> {
     try {
-      let expr = '';
-      if (workspace) {
-        expr += `workspace == "${workspace}"`;
-      }
-      if (project_id) {
-        expr += expr ? ` && project_id == "${project_id}"` : `project_id == "${project_id}"`;
-      }
-      if (status) {
-        expr += expr ? ` && status == "${status}"` : `status == "${status}"`;
-      }
-
       const searchResponse = await milvusClient.search({
         collection_name: this.collectionName,
         vector: embedding,
         limit,
         output_fields: [
           'id',
-          'title',
+          'name',
           'description',
-          'workspace',
-          'project_id',
-          'due_date',
           'status',
+          'due_date',
           'priority',
-          'tags',
           'assignee',
           'created_at',
           'modified_at'
-        ],
-        expr: expr || undefined
+        ]
       });
 
       return searchResponse.results;
@@ -219,88 +235,51 @@ export class TaskVectorStore {
     }
   }
 
-  // Delete tasks by IDs
-  async deleteTasks(taskIds: string[]) {
+  // Get prioritized tasks
+  async getPrioritizedTasks(query: string, userId: string): Promise<PrioritizedTask[]> {
     try {
-      const expr = `id in [${taskIds.map(id => `"${id}"`).join(',')}]`;
-      const deleteResponse = await milvusClient.delete({
-        collection_name: this.collectionName,
-        expr
-      });
-      return deleteResponse;
+      // Create embedding for query
+      const queryEmbedding = await openAIEmbeddings.embedQuery(query);
+
+      // Search for similar tasks
+      const searchResults = await this.searchSimilarTasks(queryEmbedding, 10);
+
+      // Process and prioritize tasks
+      const tasks = await Promise.all(
+        searchResults.map(async (result: any) => {
+          const priorityPrompt = `
+            Given the user query "${query}", analyze the following task and provide 2-3 brief reasons for its priority level:
+            Task: ${result.name}
+            Description: ${result.description}
+            Status: ${result.status}
+            Due Date: ${result.due_date || 'No due date'}
+            
+            Format your response as a JSON array of strings, each containing a reason.
+          `;
+
+          const reasonsResponse = await openAIEmbeddings.generateResponse(priorityPrompt);
+          let priorityReasons: string[];
+          try {
+            priorityReasons = JSON.parse(reasonsResponse);
+          } catch (e) {
+            priorityReasons = ['Relevance to query', 'Task importance'];
+          }
+
+          return {
+            ...result,
+            priorityScore: result.score,
+            priorityReasons
+          };
+        })
+      );
+
+      return tasks.sort((a, b) => b.priorityScore - a.priorityScore);
     } catch (error) {
-      console.error('Error deleting tasks:', error);
-      throw error;
-    }
-  }
-
-  // Update task by ID
-  async updateTask(taskId: string, updateData: Partial<TaskVector>) {
-    try {
-      const expr = `id == "${taskId}"`;
-      
-      // Remove undefined values and id from update data
-      const cleanUpdateData = Object.entries(updateData).reduce((acc, [key, value]) => {
-        if (value !== undefined && key !== 'id') {
-          acc[key] = value;
-        }
-        return acc;
-      }, {} as Record<string, any>);
-
-      if (Object.keys(cleanUpdateData).length > 0) {
-        await milvusClient.delete({
-          collection_name: this.collectionName,
-          expr
-        });
-
-        // Insert updated task
-        await this.insertTasks([{
-          id: taskId,
-          ...cleanUpdateData
-        } as TaskVector]);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error updating task:', error);
-      throw error;
-    }
-  }
-
-  // Get task by ID
-  async getTaskById(taskId: string): Promise<TaskVector | null> {
-    try {
-      const expr = `id == "${taskId}"`;
-      const response = await milvusClient.query({
-        collection_name: this.collectionName,
-        expr,
-        output_fields: [
-          'id',
-          'title',
-          'description',
-          'embedding',
-          'workspace',
-          'project_id',
-          'due_date',
-          'status',
-          'priority',
-          'tags',
-          'assignee',
-          'created_at',
-          'modified_at'
-        ]
-      });
-
-      if (response.data.length === 0) {
-        return null;
-      }
-
-      return response.data[0] as TaskVector;
-    } catch (error) {
-      console.error('Error getting task by ID:', error);
+      console.error('Error getting prioritized tasks:', error);
       throw error;
     }
   }
 }
 
-export default TaskVectorStore;
+// Export singleton instance
+export const taskVectorStore = TaskVectorStore.getInstance();
