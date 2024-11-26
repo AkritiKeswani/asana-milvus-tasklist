@@ -2,42 +2,72 @@
 
 import React, { useState, useEffect } from "react";
 
-// Define the structure of a task for type safety
 interface Task {
   id: string;
   name: string;
   description?: string;
 }
 
-export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]); // Task state with type safety
-  const [loading, setLoading] = useState<boolean>(true); // Loading state
-  const [error, setError] = useState<string | null>(null); // Error state
+interface ApiError {
+  message: string;
+  code?: string;
+  status?: number;
+}
 
-  // Fetch tasks from the API
+export default function TasksPage() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchTasks = async () => {
-      setLoading(true); // Show loading spinner
-      setError(null); // Reset error state
+      setLoading(true);
+      setError(null);
+      
       try {
         const response = await fetch("/api/tasks");
+        
         if (!response.ok) {
-          throw new Error(`Error fetching tasks: ${response.statusText}`);
+          throw new Error(
+            `Failed to fetch tasks (${response.status}): ${response.statusText}`
+          );
         }
+        
         const data = await response.json();
-        setTasks(data.tasks || []); // Safely handle tasks
+        
+        if (!data || !Array.isArray(data.tasks)) {
+          throw new Error("Invalid response format from server");
+        }
+        
+        setTasks(data.tasks);
       } catch (err) {
-        console.error("Fetch Error:", err);
-        setError(err instanceof Error ? err.message : "Failed to fetch tasks");
+        // Type guard for Error objects
+        const errorMessage = err instanceof Error 
+          ? err.message 
+          : "An unexpected error occurred while fetching tasks";
+          
+        // Safe error logging for client component
+        if (process.env.NODE_ENV !== 'production') {
+          // Only log in development
+          const errorDetails = err instanceof Error ? err : new Error(String(err));
+          console.warn('[Task Fetch Error]:', errorDetails);
+        }
+        
+        setError(errorMessage);
       } finally {
-        setLoading(false); // Hide loading spinner
+        setLoading(false);
       }
     };
 
-    fetchTasks(); // Call fetch function
-  }, []); // Run once on component mount
+    fetchTasks();
+  }, []);
 
-  // Handle loading state
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    window.location.reload();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -46,17 +76,16 @@ export default function TasksPage() {
     );
   }
 
-  // Handle error state
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <p className="text-red-600 font-semibold text-lg">
-            {error || "An error occurred while fetching tasks."}
+            {error}
           </p>
           <button
             className="mt-4 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
-            onClick={() => window.location.reload()} // Reload page to retry
+            onClick={handleRetry}
           >
             Retry
           </button>
@@ -65,7 +94,6 @@ export default function TasksPage() {
     );
   }
 
-  // Render tasks
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">All Tasks</h1>

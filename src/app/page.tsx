@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 
+// Define interfaces
 interface AsanaCustomField {
   id: string;
   name: string;
@@ -27,9 +28,12 @@ interface PrioritizedTask {
 interface ApiResponse {
   tasks: PrioritizedTask[];
   summary: string;
+  success: boolean;
+  tasksFound: number;
 }
 
-export default function TaskDashboard() {
+// Define the component as a React Function Component
+const Home: React.FC = () => {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<ApiResponse | null>(null);
@@ -37,26 +41,42 @@ export default function TaskDashboard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!query.trim()) return;
+    
     setLoading(true);
     setError(null);
 
     try {
+      console.log('Sending request to /api/prioritize');
       const result = await fetch('/api/prioritize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: JSON.stringify({ 
           query,
-          userId: 'your-user-id'
+          userId: 'test-user'
         })
       });
 
-      if (!result.ok) {
-        throw new Error('Failed to fetch priorities');
+      console.log('Response status:', result.status);
+      
+      const contentType = result.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`Expected JSON response but got ${contentType}`);
       }
 
       const data = await result.json();
+      console.log('Response data:', data);
+
+      if (!result.ok) {
+        throw new Error(data.error || `Server error: ${result.status}`);
+      }
+
       setResponse(data);
     } catch (err) {
+      console.error('Error details:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -65,9 +85,8 @@ export default function TaskDashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg"> {/* Changed from max-w-3xl to max-w-lg */}
-        {/* Search Section */}
-        <div className="bg-white rounded-xl shadow-lg aspect-[4/3] flex flex-col p-8"> {/* Added aspect ratio and flex */}
+      <div className="w-full max-w-lg">
+        <div className="bg-white rounded-xl shadow-lg aspect-[4/3] flex flex-col p-8">
           <div className="flex-1 flex flex-col justify-center">
             <h2 className="text-2xl font-bold text-center mb-8">Task Prioritization Assistant</h2>
             <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto w-full">
@@ -91,17 +110,14 @@ export default function TaskDashboard() {
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6 text-center">
             <p className="text-red-600">{error}</p>
           </div>
         )}
 
-        {/* Results Section */}
-        {response && (
+        {response?.success && (
           <div className="mt-6 space-y-6">
-            {/* AI Summary */}
             <div className="bg-white rounded-xl shadow-lg p-8">
               <h2 className="text-2xl font-bold mb-4">AI Summary</h2>
               <div className="prose max-w-none">
@@ -109,7 +125,6 @@ export default function TaskDashboard() {
               </div>
             </div>
 
-            {/* Prioritized Tasks */}
             <div className="bg-white rounded-xl shadow-lg p-8">
               <h2 className="text-2xl font-bold mb-6">Prioritized Tasks</h2>
               <div className="space-y-4">
@@ -120,28 +135,30 @@ export default function TaskDashboard() {
                   >
                     <div className="flex justify-between items-start gap-4">
                       <h3 className="font-semibold text-lg text-gray-900">{task.name}</h3>
-                      <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
-                        Score: {task.priorityScore}
+                      <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                        Score: {task.priorityScore.toFixed(1)}
                       </span>
                     </div>
                     {task.description && (
-                      <p className="text-gray-600 mt-3 leading-relaxed">{task.description}</p>
+                      <p className="text-gray-600 mt-3">{task.description}</p>
                     )}
                     {task.due_date && (
                       <p className="text-sm text-gray-500 mt-3">
                         Due: {new Date(task.due_date).toLocaleDateString()}
                       </p>
                     )}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {task.priorityReasons.map((reason, index) => (
-                        <span 
-                          key={index}
-                          className="inline-block bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm"
-                        >
-                          {reason}
-                        </span>
-                      ))}
-                    </div>
+                    {task.priorityReasons?.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {task.priorityReasons.map((reason, index) => (
+                          <span 
+                            key={index}
+                            className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm"
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -151,4 +168,7 @@ export default function TaskDashboard() {
       </div>
     </main>
   );
-}
+};
+
+// Export the component
+export default Home;

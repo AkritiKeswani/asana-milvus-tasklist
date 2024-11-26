@@ -179,6 +179,74 @@ class TaskVectorStore {
     }
   }
 
+  // Get all tasks with optional filtering
+  async getTasks(filter: string = 'all'): Promise<TaskVector[]> {
+    try {
+      // First ensure collection is loaded
+      await milvusClient.loadCollection({
+        collection_name: this.collectionName
+      });
+
+      // Construct query expression based on filter
+      let expr = '';
+      switch (filter) {
+        case 'active':
+          expr = "status != 'completed' AND status != 'archived'";
+          break;
+        case 'completed':
+          expr = "status == 'completed'";
+          break;
+        case 'archived':
+          expr = "status == 'archived'";
+          break;
+        default:
+          // 'all' or any other value - no filter
+          break;
+      }
+
+      // Query the collection
+      const queryResult = await milvusClient.query({
+        collection_name: this.collectionName,
+        expr: expr,
+        output_fields: [
+          'id',
+          'name',
+          'description',
+          'workspace',
+          'userId',
+          'project_id',
+          'status',
+          'due_date',
+          'priority',
+          'assignee',
+          'created_at',
+          'modified_at'
+        ]
+      });
+
+      // Transform the results to match TaskVector interface
+      return queryResult.data.map(task => ({
+        id: task.id,
+        name: task.name,
+        description: task.description,
+        workspace: task.workspace,
+        userId: task.userId,
+        project_id: task.project_id,
+        status: task.status,
+        due_date: task.due_date,
+        priority: task.priority,
+        assignee: task.assignee,
+        created_at: task.created_at,
+        modified_at: task.modified_at,
+        embedding: [] // Empty array since we're not fetching embeddings
+      }));
+
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      throw error;
+    }
+  }
+
   // Insert a single task
   async insertTask(task: TaskVector) {
     try {

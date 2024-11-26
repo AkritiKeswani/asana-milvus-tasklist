@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link' // Add this import
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -19,13 +20,13 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex justify-between h-16">
                 <div className="flex">
-                  <a href="/" className="flex items-center px-2 text-purple-700 font-medium">
+                  <Link href="/" className="flex items-center px-2 text-purple-700 font-medium">
                     Task Assistant
-                  </a>
+                  </Link>
                   <div className="ml-6 flex items-center space-x-4">
-                    <a href="/dashboard" className="text-gray-700 hover:text-purple-700">Dashboard</a>
-                    <a href="/tasks" className="text-gray-700 hover:text-purple-700">All Tasks</a>
-                    <a href="/projects" className="text-gray-700 hover:text-purple-700">Projects</a>
+                    <Link href="/dashboard" className="text-gray-700 hover:text-purple-700">Dashboard</Link>
+                    <Link href="/tasks" className="text-gray-700 hover:text-purple-700">All Tasks</Link>
+                    <Link href="/projects" className="text-gray-700 hover:text-purple-700">Projects</Link>
                   </div>
                 </div>
               </div>
