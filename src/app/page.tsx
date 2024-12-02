@@ -40,22 +40,48 @@ export default function TaskDashboard() {
     setLoading(true);
     setError(null);
 
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     try {
-      const result = await fetch('/api/prioritize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query,
-          userId: 'your-user-id'
-        })
-      });
+      // Dummy data instead of API call
+      const dummyResponse: ApiResponse = {
+        tasks: [
+          {
+            id: '1',
+            name: 'Complete Project Proposal',
+            description: 'Draft and finalize the Q2 project proposal for client review',
+            due_date: '2024-04-15',
+            completed: false,
+            modified_at: new Date().toISOString(),
+            priorityScore: 95,
+            priorityReasons: ['Urgent', 'Client Priority', 'Revenue Impact']
+          },
+          {
+            id: '2',
+            name: 'Review Pull Requests',
+            description: 'Review and merge pending pull requests for the main feature branch',
+            due_date: '2024-04-10',
+            completed: false,
+            modified_at: new Date().toISOString(),
+            priorityScore: 85,
+            priorityReasons: ['Blocking Others', 'Technical Debt']
+          },
+          {
+            id: '3',
+            name: 'Team Weekly Sync',
+            description: 'Prepare and attend weekly team sync meeting',
+            due_date: '2024-04-08',
+            completed: false,
+            modified_at: new Date().toISOString(),
+            priorityScore: 75,
+            priorityReasons: ['Team Collaboration', 'Regular Schedule']
+          }
+        ],
+        summary: `Based on your query "${query}", I recommend focusing on the project proposal first due to its client importance and revenue impact. Following that, the pull requests need attention as they're blocking team progress. The team sync, while important, can be handled during its scheduled time.`
+      };
 
-      if (!result.ok) {
-        throw new Error('Failed to fetch priorities');
-      }
-
-      const data = await result.json();
-      setResponse(data);
+      setResponse(dummyResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
