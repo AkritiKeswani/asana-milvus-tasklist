@@ -2,66 +2,74 @@ import { NextResponse } from 'next/server';
 import { taskVectorStore } from '@/utils/taskVectorStore';
 import { openAIEmbeddings } from '@/utils/openAI';
 
-// Add OPTIONS method for CORS support
-export async function OPTIONS() {
-  return NextResponse.json({}, { status: 200 });
-}
-
-export async function POST(req: Request) {
-  console.log('🚀 API endpoint hit at:', new Date().toISOString());
-
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
-    console.log('📝 Received body:', body);
+    console.log('Prioritize API endpoint hit');
+    
+    const body = await request.json();
+    console.log('Received request body:', body);
 
     const { query, userId } = body;
 
-    if (!query) {
-      console.log('❌ Missing query parameter');
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Query is required' 
-      }, { 
-        status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-        }
+    // Validate required fields
+    if (!query || !userId) {
+      return NextResponse.json(
+        { error: 'Query and userId are required' },
+        { status: 400 }
+      );
+    }
+
+    // Initialize collections if needed
+    console.log('Ensuring collection exists...');
+    await taskVectorStore.createCollection();
+
+    console.log('Getting prioritized tasks...');
+    const prioritizedTasks = await taskVectorStore.getPrioritizedTasks(query, userId);
+    console.log(`Found ${prioritizedTasks.length} tasks`);
+
+    if (prioritizedTasks.length === 0) {
+      return NextResponse.json({
+        tasks: [],
+        summary: "No tasks found for the given criteria."
       });
     }
 
-    // Test response first to ensure route is working
-    return NextResponse.json({
+    // Generate task description for OpenAI
+    const tasksDescription = prioritizedTasks
+      .map((task) => 
+        `${task.name} (Priority: ${task.priorityScore.toFixed(2)}, Reasons: ${task.priorityReasons?.join(', ')})`
+      )
+      .join('\n');
+
+    // Generate summary using OpenAI
+    console.log('Generating summary...');
+    const prompt = `Based on the user's query "${query}", here are the relevant tasks in order of priority:\n${tasksDescription}\n\nPlease provide a natural language summary of these tasks and their priorities, focusing on why they are ordered this way.`;
+    
+    const summary = await openAIEmbeddings.generateResponse(prompt);
+
+    const response = {
       success: true,
-      tasks: [
-        {
-          id: '1',
-          name: 'Test Task',
-          description: 'This is a test task',
-          due_date: new Date().toISOString(),
-          priorityScore: 0.95,
-          priorityReasons: ['High priority test'],
-          completed: false,
-          modified_at: new Date().toISOString()
-        }
-      ],
-      summary: 'Test summary response',
-      tasksFound: 1
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
+      query,
+      tasks: prioritizedTasks,
+      summary,
+      tasksFound: prioritizedTasks.length
+    };
+
+    console.log('Sending response with', prioritizedTasks.length, 'tasks');
+    return NextResponse.json(response);
 
   } catch (error) {
-    console.error('❌ Error in API:', error);
+    console.error('Error in prioritize API:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to process request'
+      error: 'Failed to prioritize tasks',
+      details: errorMessage,
+      timestamp: new Date().toISOString()
     }, { 
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      }
+      status: 500 
     });
   }
 }
