@@ -23,7 +23,7 @@ export default function RootLayout({
                     Task Assistant
                   </a>
                   <div className="ml-6 flex items-center space-x-4">
-                    <a href="/dashboard" className="text-gray-700 hover:text-purple-700">Dashboard</a>
+           
                     <a href="/tasks" className="text-gray-700 hover:text-purple-700">All Tasks</a>
                     <a href="/projects" className="text-gray-700 hover:text-purple-700">Projects</a>
                   </div>
