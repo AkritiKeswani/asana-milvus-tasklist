@@ -40,8 +40,8 @@ export default function TaskDashboard() {
     setLoading(true);
     setError(null);
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Increased loading delay to 2 seconds for better UX
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
       // Dummy data matching the Asana task
