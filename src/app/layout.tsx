@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import { PropsWithChildren } from 'react'
 import './globals.css'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Task Finder',
@@ -8,9 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: PropsWithChildren) {
   return (
     <html lang="en">
       <body>
@@ -19,11 +19,11 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex h-16 items-center justify-between">
                 <div className="flex items-center gap-8">
-                  <a href="/" className="text-xl font-medium text-slate-900">
+                  <Link href="/" className="text-xl font-medium text-slate-900">
                     Task Finder
-                  </a>
+                  </Link>
                   <div className="hidden md:flex gap-6">
-                    <a href="/projects" className="text-slate-600 hover:text-slate-900 transition-colors">Projects</a>
+                    <Link href="/projects" className="text-slate-600 hover:text-slate-900 transition-colors">Projects</Link>
                   </div>
                 </div>
               </div>

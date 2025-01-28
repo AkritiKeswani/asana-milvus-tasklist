@@ -1,4 +1,17 @@
-import { milvusClient, COLLECTIONS } from '../src/utils/milvusClient';
+import { milvusClient, COLLECTIONS } from './milvusClient';
+
+// Define the helper function first
+const ensureCollection = async (collectionName: string): Promise<boolean> => {
+  try {
+    const exists = await milvusClient.hasCollection({
+      collection_name: collectionName
+    });
+    return !!exists.value;
+  } catch (error) {
+    console.error('Error checking collection:', collectionName, error);
+    return false;
+  }
+};
 
 export async function testMilvusConnection() {
   try {

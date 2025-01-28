@@ -1,7 +1,23 @@
 import { Client } from 'asana';
 import { openAIEmbeddings } from './openAI';
 import { taskVectorStore, TaskVector } from './taskVectorStore';
-import { taskMetadataStore } from './taskMetadataStore';
+
+interface AsanaCustomField {
+  name: string;
+  number_value?: number;
+}
+
+interface AsanaTask {
+  gid: string;
+  name: string;
+  notes?: string;
+  due_on?: string;
+  projects?: Array<{ gid: string; name: string }>;
+  completed: boolean;
+  modified_at: string;
+  assignee?: { gid: string };
+  custom_fields: AsanaCustomField[];
+}
 
 export class AsanaService {
   private client: Client;
@@ -9,8 +25,7 @@ export class AsanaService {
 
   private constructor() {
     this.client = Client.create({
-      defaultHeaders: { 'Asana-Enable': 'new_user_task_lists,new_project_templates' },
-      logAsanaChangeWarnings: false
+      defaultHeaders: { 'Asana-Enable': 'new_user_task_lists,new_project_templates' }
     }).useAccessToken(process.env.ASANA_ACCESS_TOKEN!);
   }
 
@@ -32,34 +47,23 @@ export class AsanaService {
     try {
       console.log('Starting Asana task sync...');
       const workspaceGid = await this.getWorkspaceGid();
-
-      // Get all incomplete tasks assigned to the user
+      
+      // Get current user's GID
+      const me = await this.client.users.me();
+      
       const tasks = await this.client.tasks.findAll({
         workspace: workspaceGid,
-        assignee: 'me',
+        assignee: parseInt(me.gid),
         completed_since: 'now',
-        opt_fields: [
-          'gid',
-          'name',
-          'notes',
-          'due_on',
-          'projects.name',
-          'completed',
-          'modified_at',
-          'assignee',
-          'custom_fields'
-        ]
+        opt_fields: 'gid,name,notes,due_on,projects.name,completed,modified_at,assignee,custom_fields'
       });
 
       console.log(`Found ${tasks.data.length} tasks in Asana`);
 
-      // Process each task
-      for (const task of tasks.data) {
-        // Generate embedding for task content
+      for (const task of tasks.data as AsanaTask[]) {
         const taskContent = `${task.name} ${task.notes || ''}`;
         const embedding = await openAIEmbeddings.embedQuery(taskContent);
 
-        // Convert Asana task to TaskVector format
         const taskVector: TaskVector = {
           id: task.gid,
           name: task.name,
@@ -76,19 +80,7 @@ export class AsanaService {
           modified_at: task.modified_at
         };
 
-        // Insert into vector store
-        const vectorInsertResponse = await taskVectorStore.insertTask(taskVector);
-        
-        // Store metadata separately
-        await taskMetadataStore.insertMetadata({
-          milvus_id: vectorInsertResponse.row_count, // Assuming this is the returned ID
-          asana_id: task.gid,
-          name: task.name,
-          description: task.notes || '',
-          status: task.completed ? 'completed' : 'active',
-          due_date: task.due_on,
-          priority: this.getPriorityFromCustomFields(task.custom_fields)
-        });
+        await taskVectorStore.insertTask(taskVector);
       }
 
       console.log('Task sync completed successfully');
@@ -98,7 +90,7 @@ export class AsanaService {
     }
   }
 
-  private getPriorityFromCustomFields(customFields: any[]): number {
+  private getPriorityFromCustomFields(customFields: AsanaCustomField[]): number {
     if (!customFields) return 0;
     
     // Look for priority field
@@ -107,7 +99,6 @@ export class AsanaService {
     );
     
     if (!priorityField?.number_value) {
-      // If no explicit priority, check for due date proximity
       return 0;
     }
 
@@ -115,10 +106,10 @@ export class AsanaService {
   }
 
   // Add method to fetch task details
-  async getTaskDetails(taskId: string) {
+  async getTaskDetails(taskId: string): Promise<AsanaTask> {
     try {
       const task = await this.client.tasks.findById(taskId);
-      return task;
+      return task as AsanaTask;
     } catch (error) {
       console.error('Error fetching task details:', error);
       throw error;

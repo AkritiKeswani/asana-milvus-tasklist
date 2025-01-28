@@ -7,7 +7,7 @@ export interface TaskVector {
     userId: string;
     project_id?: string;
     tags?: string[];
-    custom_fields?: Record<string, any>;
+    custom_fields?: Record<string, string | number | boolean | null>;
     due_date?: string;
     status: string;
     priority?: number;
@@ -27,7 +27,7 @@ export interface TaskVector {
     assignee?: string;
     project_id?: string;
     tags?: string[];
-    custom_fields?: Record<string, any>;
+    custom_fields?: Record<string, string | number | boolean | null>;
   }
   
   export interface AdvancedSearchParams {
@@ -39,7 +39,7 @@ export interface TaskVector {
     status?: string;
     assignee?: string;
     tags?: string[];
-    custom_fields?: Record<string, any>;
+    custom_fields?: Record<string, string | number | boolean | null>;
     projects?: string[];
     due_date_start?: string;
     due_date_end?: string;

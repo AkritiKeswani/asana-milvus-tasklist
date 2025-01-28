@@ -1,4 +1,4 @@
-import { MilvusClient, DataType, SearchResult } from '@zilliz/milvus2-sdk-node';
+import { DataType, SearchResultData } from '@zilliz/milvus2-sdk-node';
 import { milvusClient, COLLECTIONS } from './milvusClient';
 import { openAIEmbeddings } from './openAI';
 
@@ -39,9 +39,10 @@ class TaskVectorStore {
   // Check if collection exists
   async collectionExists(): Promise<boolean> {
     try {
-      return await milvusClient.hasCollection({
+      const exists = await milvusClient.hasCollection({
         collection_name: this.collectionName
       });
+      return !!exists.value;  // Convert BoolResponse to primitive boolean
     } catch (error) {
       console.error('Error checking collection existence:', error);
       throw error;
@@ -77,7 +78,7 @@ class TaskVectorStore {
               data_type: DataType.VarChar,
               max_length: 100,
               is_primary_key: true,
-              auto_id: false
+              autoID: false
             },
             {
               name: 'name',
@@ -160,7 +161,7 @@ class TaskVectorStore {
           extra_params: {
             index_type: 'IVF_FLAT',
             metric_type: 'L2',
-            params: { nlist: 1024 }
+            params: JSON.stringify({ nlist: 1024 })
           }
         });
 
@@ -209,7 +210,7 @@ class TaskVectorStore {
   }
 
   // Search for similar tasks
-  async searchSimilarTasks(embedding: number[], limit: number = 5): Promise<SearchResult[]> {
+  async searchSimilarTasks(embedding: number[], limit: number = 5): Promise<SearchResultData[]> {
     try {
       const searchResponse = await milvusClient.search({
         collection_name: this.collectionName,
@@ -236,17 +237,13 @@ class TaskVectorStore {
   }
 
   // Get prioritized tasks
-  async getPrioritizedTasks(query: string, userId: string): Promise<PrioritizedTask[]> {
+  async getPrioritizedTasks(query: string): Promise<PrioritizedTask[]> {
     try {
-      // Create embedding for query
       const queryEmbedding = await openAIEmbeddings.embedQuery(query);
-
-      // Search for similar tasks
       const searchResults = await this.searchSimilarTasks(queryEmbedding, 10);
 
-      // Process and prioritize tasks
       const tasks = await Promise.all(
-        searchResults.map(async (result: any) => {
+        searchResults.map(async (result: SearchResultData) => {
           const priorityPrompt = `
             Given the user query "${query}", analyze the following task and provide 2-3 brief reasons for its priority level:
             Task: ${result.name}
@@ -261,12 +258,23 @@ class TaskVectorStore {
           let priorityReasons: string[];
           try {
             priorityReasons = JSON.parse(reasonsResponse);
-          } catch (e) {
+          } catch {
             priorityReasons = ['Relevance to query', 'Task importance'];
           }
 
           return {
-            ...result,
+            id: result.id as string,
+            name: result.name as string,
+            description: result.description as string,
+            status: result.status as string,
+            workspace: result.workspace as string,
+            userId: result.userId as string,
+            project_id: result.project_id as string,
+            due_date: result.due_date as string,
+            priority: result.priority as number,
+            assignee: result.assignee as string,
+            created_at: result.created_at as string,
+            modified_at: result.modified_at as string,
             priorityScore: result.score,
             priorityReasons
           };

@@ -19,7 +19,7 @@ export interface AsanaUser {
     id: string;
     name: string;
     type: string;
-    value?: any;
+    value?: string | number | boolean | null;
     enum_options?: Array<{
       id: string;
       name: string;

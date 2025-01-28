@@ -6,7 +6,7 @@ interface AsanaCustomField {
   id: string;
   name: string;
   type: string;
-  value?: any;
+  value?: string | number | boolean | null;
 }
 
 interface PrioritizedTask {
@@ -59,6 +59,9 @@ export default function TaskDashboard() {
       setResponse(data);
     } catch (err) {
       console.error('Error details:', err);
+      if (err instanceof Error) {
+        console.error(err.message);
+      }
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -72,7 +75,9 @@ export default function TaskDashboard() {
         <div className="bg-white rounded-xl shadow-lg aspect-[4/3] flex flex-col p-8 border border-slate-200">
           <div className="flex-1 flex flex-col justify-center">
             <h2 className="text-2xl font-bold text-center mb-4 text-slate-800">Task Finder</h2>
-            <p className="text-center text-slate-600 mb-8">Describe what you're looking for, and we'll find the most relevant task.</p>
+            <p className="text-center text-slate-600 mb-8">
+              Describe what you&apos;re looking for, and we&apos;ll find the most relevant task.
+            </p>
             <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto w-full">
               <div>
                 <input

@@ -7,7 +7,7 @@ interface AsanaCustomField {
   id: string;
   name: string;
   type: string;
-  value?: any;
+  value?: string | number | boolean | null;
 }
 
 interface PrioritizedTask {

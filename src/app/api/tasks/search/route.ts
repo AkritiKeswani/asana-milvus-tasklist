@@ -35,15 +35,41 @@ export async function POST(request: Request) {
     const protoPath = path.join(process.cwd(), '.next/proto/proto');
     console.log('Proto path:', protoPath);
     
+    if (!process.env.MILVUS_URI || !process.env.ZILLIZ_TOKEN) {
+      throw new Error('Missing required environment variables: MILVUS_URI or ZILLIZ_TOKEN');
+    }
+
     const client = new MilvusClient({
       address: process.env.MILVUS_URI,
       token: process.env.ZILLIZ_TOKEN,
       ssl: true,
       tls: {
-        rejectUnauthorized: false
-      },
-      protoPath
+        verifyOptions: {
+          rejectUnauthorized: false
+        }
+      }
     });
+
+    interface CustomField {
+      id: string;
+      name: string;
+      type: string;
+      value?: string | number | boolean | null;
+    }
+
+    interface SearchResult {
+      id: string;
+      score: number;
+      name: string;
+      description: string;
+      due_date: string;
+      tags: string[];
+      project_id: string;
+      assignee_id: string;
+      custom_fields: CustomField[];
+      completed: boolean;
+      modified_at: string;
+    }
 
     // Search Milvus with the embedding vector
     const searchResults = await client.search({
@@ -64,8 +90,8 @@ export async function POST(request: Request) {
 
     // Get only the most relevant task with high similarity
     const tasks = searchResults.results
-      .map(result => ({
-        ...result,
+      .map((result): SearchResult & { normalizedScore: number } => ({
+        ...result as unknown as SearchResult,
         normalizedScore: (result.score + 1) / 2, // Convert from [-1,1] to [0,1]
       }))
       .filter(result => result.normalizedScore > 0.85) // Increased threshold for higher relevance
@@ -99,7 +125,7 @@ export async function POST(request: Request) {
       summary: summaryMessage,
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Detailed error:', error);
     return NextResponse.json(
       { error: 'Failed to search tasks: ' + (error instanceof Error ? error.message : String(error)) },
@@ -108,7 +134,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function OPTIONS(request: Request) {
+export async function OPTIONS() {
   return NextResponse.json({}, { 
     status: 200,
     headers: {
