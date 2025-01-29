@@ -16,6 +16,7 @@
     "@grpc/proto-loader": "^0.7.13",
     "@zilliz/milvus2-sdk-node": "^2.4.9",
     "dotenv": "^16.4.5",
+    "lucide-react": "^0.474.0",
     "next": "^15.0.3",
     "openai": "^4.73.0",
     "react": "^18.3.1",
