@@ -26,7 +26,8 @@ export class AsanaService {
   private constructor() {
     this.client = Client.create({
       defaultHeaders: { 'Asana-Enable': 'new_user_task_lists,new_project_templates' }
-    }).useAccessToken(process.env.ASANA_ACCESS_TOKEN!);
+    });
+    this.client.useAccessToken(process.env.ASANA_ACCESS_TOKEN!);
   }
 
   public static getInstance(): AsanaService {
@@ -53,7 +54,7 @@ export class AsanaService {
       
       const tasks = await this.client.tasks.findAll({
         workspace: workspaceGid,
-        assignee: parseInt(me.gid),
+        assignee: me.gid,
         completed_since: 'now',
         opt_fields: 'gid,name,notes,due_on,projects.name,completed,modified_at,assignee,custom_fields'
       });
@@ -93,7 +94,6 @@ export class AsanaService {
   private getPriorityFromCustomFields(customFields: AsanaCustomField[]): number {
     if (!customFields) return 0;
     
-    // Look for priority field
     const priorityField = customFields.find(field => 
       field.name.toLowerCase().includes('priority')
     );
@@ -105,7 +105,6 @@ export class AsanaService {
     return priorityField.number_value;
   }
 
-  // Add method to fetch task details
   async getTaskDetails(taskId: string): Promise<AsanaTask> {
     try {
       const task = await this.client.tasks.findById(taskId);

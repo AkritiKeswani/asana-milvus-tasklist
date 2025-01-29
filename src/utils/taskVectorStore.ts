@@ -36,20 +36,18 @@ class TaskVectorStore {
     return TaskVectorStore.instance;
   }
 
-  // Check if collection exists
   async collectionExists(): Promise<boolean> {
     try {
       const exists = await milvusClient.hasCollection({
         collection_name: this.collectionName
       });
-      return !!exists.value;  // Convert BoolResponse to primitive boolean
+      return !!exists.value;
     } catch (error) {
       console.error('Error checking collection existence:', error);
       throw error;
     }
   }
 
-  // Get collection statistics
   async getCollectionStats() {
     try {
       const stats = await milvusClient.getCollectionStatistics({
@@ -62,7 +60,6 @@ class TaskVectorStore {
     }
   }
 
-  // Create collection if it doesn't exist
   async createCollection(): Promise<boolean> {
     try {
       const exists = await this.collectionExists();
@@ -154,7 +151,6 @@ class TaskVectorStore {
           ]
         });
 
-        // Create index on embedding field
         await milvusClient.createIndex({
           collection_name: this.collectionName,
           field_name: 'embedding',
@@ -165,7 +161,6 @@ class TaskVectorStore {
           }
         });
 
-        // Load collection into memory
         await milvusClient.loadCollection({
           collection_name: this.collectionName
         });
@@ -180,7 +175,6 @@ class TaskVectorStore {
     }
   }
 
-  // Insert a single task
   async insertTask(task: TaskVector) {
     try {
       const response = await milvusClient.insert({
@@ -209,7 +203,6 @@ class TaskVectorStore {
     }
   }
 
-  // Search for similar tasks
   async searchSimilarTasks(embedding: number[], limit: number = 5): Promise<SearchResultData[]> {
     try {
       const searchResponse = await milvusClient.search({
@@ -236,7 +229,6 @@ class TaskVectorStore {
     }
   }
 
-  // Get prioritized tasks
   async getPrioritizedTasks(query: string): Promise<PrioritizedTask[]> {
     try {
       const queryEmbedding = await openAIEmbeddings.embedQuery(query);
@@ -289,5 +281,4 @@ class TaskVectorStore {
   }
 }
 
-// Export singleton instance
 export const taskVectorStore = TaskVectorStore.getInstance();
