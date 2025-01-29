@@ -270,3 +270,4 @@ class TaskVectorStore {
 }
 
 export const taskVectorStore = TaskVectorStore.getInstance()
+export type { TaskVector }  // Add this if you want to export the type too
