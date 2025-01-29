@@ -1,7 +1,7 @@
 import { Client } from 'asana';
 import { openAIEmbeddings } from './openAI';
-import { taskVectorStore, TaskVector } from './taskVectorStore';
-
+import { taskVectorStore } from './taskVectorStore';
+import type { TaskVector } from '@/utils/types/taskTypes';
 interface AsanaCustomField {
   name: string;
   number_value?: number;
@@ -17,6 +17,13 @@ interface AsanaTask {
   modified_at: string;
   assignee?: { gid: string };
   custom_fields: AsanaCustomField[];
+}
+
+interface TaskFindAllParams {
+  workspace: string;
+  assignee: string;
+  completed_since: string;
+  opt_fields: string;
 }
 
 export class AsanaService {
@@ -52,12 +59,14 @@ export class AsanaService {
       // Get current user's GID
       const me = await this.client.users.me();
       
-      const tasks = await this.client.tasks.findAll({
+      const params: TaskFindAllParams = {
         workspace: workspaceGid,
         assignee: me.gid,
         completed_since: 'now',
         opt_fields: 'gid,name,notes,due_on,projects.name,completed,modified_at,assignee,custom_fields'
-      });
+      };
+
+      const tasks = await this.client.tasks.findAll(params as any);
 
       console.log(`Found ${tasks.data.length} tasks in Asana`);
 

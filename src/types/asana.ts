@@ -4,6 +4,22 @@ export interface AsanaUser {
     name: string;
     email: string;
   }
+
+  export interface SearchResult {
+    id: string;
+    gid: string;
+    name: string;
+    description?: string;
+    due_date?: string;  // Matches with due_on/due_at from AsanaTask
+    tags: AsanaTag[];
+    project_id?: string;
+    assignee_id?: string;
+    custom_fields: AsanaCustomField[];
+    completed: boolean;
+    modified_at: string;
+    // Additional fields needed for search results
+    score?: number;
+  }
   
   export interface AsanaProject {
     id: string;

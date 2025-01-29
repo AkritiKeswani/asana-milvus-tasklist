@@ -31,11 +31,9 @@ interface ApiResponse {
   summary: string
 }
 
-interface PageProps {
-  children?: ReactNode
-}
+interface PageProps {}
 
-export default function TaskDashboard({ children }: PageProps) {
+export default function TaskDashboard(): JSX.Element {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [response, setResponse] = useState<ApiResponse | null>(null)
@@ -169,7 +167,6 @@ export default function TaskDashboard({ children }: PageProps) {
           </div>
         </div>
       )}
-      {children}
     </div>
   )
 }

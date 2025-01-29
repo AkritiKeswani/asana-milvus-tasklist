@@ -1,28 +1,11 @@
 import { DataType, type SearchResultData } from "@zilliz/milvus2-sdk-node"
 import { milvusClient, COLLECTIONS } from "./milvusClient"
 import { openAIEmbeddings } from "./openAI"
-import type { TaskVector, PrioritizedTask } from "../types/taskTypes"
+import type { TaskVector as BaseTaskVector, PrioritizedTask as BasePrioritizedTask } from "@/utils/types/taskTypes"
 
-export interface TaskVector {
-  id: string
-  name: string
-  description: string
-  embedding: number[]
-  workspace: string
-  userId: string
-  project_id?: string
-  due_date?: string
-  status: string
-  priority?: number
-  assignee?: string
-  created_at: string
-  modified_at: string
-}
-
-export interface PrioritizedTask extends Omit<TaskVector, "embedding"> {
-  priorityScore: number
-  priorityReasons: string[]
-}
+// Use the imported types but keep the local interface for Milvus-specific fields
+type TaskVector = BaseTaskVector
+type PrioritizedTask = BasePrioritizedTask
 
 class TaskVectorStore {
   private readonly collectionName = COLLECTIONS.TASKS
@@ -216,6 +199,9 @@ class TaskVectorStore {
           "id",
           "name",
           "description",
+          "workspace",
+          "userId",
+          "project_id",
           "status",
           "due_date",
           "priority",
@@ -223,6 +209,10 @@ class TaskVectorStore {
           "created_at",
           "modified_at",
         ],
+        metric_type: "COSINE",
+        params: {
+          nprobe: 10,
+        },
       })
 
       return searchResponse.results
@@ -262,17 +252,12 @@ class TaskVectorStore {
             name: result.name as string,
             description: result.description as string,
             status: result.status as string,
-            workspace: result.workspace as string,
-            userId: result.userId as string,
             project_id: result.project_id as string,
             due_date: result.due_date as string,
-            priority: result.priority as number,
             assignee: result.assignee as string,
-            created_at: result.created_at as string,
-            modified_at: result.modified_at as string,
             priorityScore: result.score,
             priorityReasons,
-          }
+          } satisfies PrioritizedTask
         }),
       )
 
@@ -285,4 +270,3 @@ class TaskVectorStore {
 }
 
 export const taskVectorStore = TaskVectorStore.getInstance()
-
