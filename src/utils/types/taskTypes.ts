@@ -7,7 +7,7 @@ export interface TaskVector {
   userId: string
   project_id?: string
   tags?: string[]
-  custom_fields?: Record<string, string | number | boolean | null>
+  custom_fields?: Record<string, string | number | boolean>
   due_date?: string
   status: string
   priority?: number
@@ -27,7 +27,7 @@ export interface PrioritizedTask {
   assignee?: string
   project_id?: string
   tags?: string[]
-  custom_fields?: Record<string, string | number | boolean | null>
+  custom_fields?: Record<string, string | number | boolean>
 }
 
 export interface AdvancedSearchParams {
@@ -39,7 +39,7 @@ export interface AdvancedSearchParams {
   status?: string
   assignee?: string
   tags?: string[]
-  custom_fields?: Record<string, string | number | boolean | null>
+  custom_fields?: Record<string, string | number | boolean>
   projects?: string[]
   due_date_start?: string
   due_date_end?: string

@@ -1,43 +1,43 @@
-import { NextResponse } from 'next/server';
-import path from 'path';
-import OpenAI from 'openai';
-import type { SearchResult, CustomField } from "@/types/asana";
+import { NextResponse } from "next/server"
+import path from "path"
+import OpenAI from "openai"
+import type { SearchResult } from "@/types/asana"
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
+})
 
-export async function POST(request: Request) {
-  console.log("Route hit!");
+export async function POST(req: Request) {
+  console.log("Route hit!")
   try {
-    const body = await request.json();
-    const text = body.text || body.query || body.input;
+    const body = await req.json()
+    const text = body.text || body.query || body.input
 
     if (!text) {
-      throw new Error("No search text provided");
+      throw new Error("No search text provided")
     }
 
-    console.log("Received text query:", text);
+    console.log("Received text query:", text)
 
-    // Get embedding from OpenAI using text-embedding-ada-002
+    // Get embedding from OpenAI
     const embedding = await openai.embeddings.create({
       model: "text-embedding-ada-002",
       input: text.trim(),
       encoding_format: "float",
-    });
+    })
 
-    const vector = embedding.data[0].embedding;
-    console.log("Generated vector of length:", vector.length);
+    const vector = embedding.data[0].embedding
+    console.log("Generated vector of length:", vector.length)
 
     // Initialize Milvus client
-    const { MilvusClient } = await import("@zilliz/milvus2-sdk-node/dist/milvus/MilvusClient");
+    const { MilvusClient } = await import("@zilliz/milvus2-sdk-node/dist/milvus/MilvusClient")
 
-    const protoPath = path.join(process.cwd(), ".next/proto/proto");
-    console.log("Proto path:", protoPath);
+    const protoPath = path.join(process.cwd(), ".next/proto/proto")
+    console.log("Proto path:", protoPath)
 
     if (!process.env.MILVUS_URI || !process.env.ZILLIZ_TOKEN) {
-      throw new Error("Missing required environment variables: MILVUS_URI or ZILLIZ_TOKEN");
+      throw new Error("Missing required environment variables: MILVUS_URI or ZILLIZ_TOKEN")
     }
 
     const client = new MilvusClient({
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
           rejectUnauthorized: false,
         },
       },
-    });
+    })
 
     // Search Milvus with the embedding vector
     const searchResults = await client.search({
@@ -74,9 +74,9 @@ export async function POST(request: Request) {
         offset: 0,
       },
       expr: "completed == false",
-    });
+    })
 
-    console.log("Search results:", searchResults);
+    console.log("Search results:", searchResults)
 
     // Get only the most relevant task with high similarity
     const tasks = searchResults.results
@@ -104,23 +104,23 @@ export async function POST(request: Request) {
         ].filter(Boolean),
       }))
       .sort((a, b) => Number.parseFloat(b.similarityPercentage) - Number.parseFloat(a.similarityPercentage))
-      .slice(0, 1);
+      .slice(0, 1)
 
     const summaryMessage =
       tasks.length > 0
         ? `Found the most relevant task (${tasks[0].similarityPercentage}% similarity) for: "${text}"`
-        : `No highly relevant tasks found for: "${text}". Try different search terms.`;
+        : `No highly relevant tasks found for: "${text}". Try different search terms.`
 
     return NextResponse.json({
       tasks,
       summary: summaryMessage,
-    });
+    })
   } catch (error: unknown) {
-    console.error("Detailed error:", error);
+    console.error("Detailed error:", error)
     return NextResponse.json(
       { error: "Failed to search tasks: " + (error instanceof Error ? error.message : String(error)) },
       { status: 500 },
-    );
+    )
   }
 }
 
@@ -135,5 +135,6 @@ export async function OPTIONS() {
         "Access-Control-Allow-Headers": "Content-Type",
       },
     },
-  );
+  )
 }
+

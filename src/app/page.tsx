@@ -1,175 +1,176 @@
-'use client';
+"use client"
 
-import { useState } from 'react';
+import { useState } from "react"
+import type { ReactNode } from "react"
 
 interface AsanaCustomField {
-  id: string;
-  name: string;
-  type: string;
-  value?: string | number | boolean | null;
+  id: string
+  name: string
+  type: string
+  value?: string | number | boolean | null
 }
 
 interface PrioritizedTask {
-  id: string;
-  name: string;
-  description?: string;
-  due_date?: string;
-  tags?: string[];
-  project_id?: string;
-  assignee_id?: string;
-  custom_fields?: AsanaCustomField[];
-  completed: boolean;
-  modified_at: string;
-  priorityScore: number;
-  similarityPercentage: string;
-  priorityReasons: string[];
+  id: string
+  name: string
+  description?: string
+  due_date?: string
+  tags?: string[]
+  project_id?: string
+  assignee_id?: string
+  custom_fields?: AsanaCustomField[]
+  completed: boolean
+  modified_at: string
+  priorityScore: number
+  similarityPercentage: string
+  priorityReasons: string[]
 }
 
 interface ApiResponse {
-  tasks: PrioritizedTask[];
-  summary: string;
+  tasks: PrioritizedTask[]
+  summary: string
 }
 
-export default function TaskDashboard() {
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<ApiResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+interface PageProps {
+  children?: ReactNode
+}
+
+export default function TaskDashboard({ children }: PageProps) {
+  const [query, setQuery] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [response, setResponse] = useState<ApiResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
 
     try {
-      const response = await fetch('/api/tasks/search', {
-        method: 'POST',
+      const response = await fetch("/api/tasks/search", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ text: query }),
-      });
+      })
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error('Failed to fetch tasks: ' + errorText);
+        throw new Error("Failed to fetch tasks")
       }
 
-      const data: ApiResponse = await response.json();
-      setResponse(data);
+      const data: ApiResponse = await response.json()
+      setResponse(data)
     } catch (err) {
-      console.error('Error details:', err);
-      if (err instanceof Error) {
-        console.error(err.message);
-      }
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
-        {/* Search Section */}
-        <div className="bg-white rounded-xl shadow-lg aspect-[4/3] flex flex-col p-8 border border-slate-200">
-          <div className="flex-1 flex flex-col justify-center">
-            <h2 className="text-2xl font-bold text-center mb-4 text-slate-800">Task Finder</h2>
-            <p className="text-center text-slate-600 mb-8">
-              Describe what you&apos;re looking for, and we&apos;ll find the most relevant task.
-            </p>
-            <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto w-full">
-              <div>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Describe the task you're looking for..."
-                  className="w-full p-4 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-300 outline-none text-lg"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-100 text-blue-700 p-4 rounded-lg font-medium hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-lg"
-              >
-                {loading ? 'Finding Task...' : 'Find Task'}
-              </button>
-            </form>
+    <div className="w-full">
+      <h1>Welcome to Task Finder</h1>
+      <p>This is where you&apos;ll find and manage your tasks.</p>
+      {/* Search Section */}
+      <div className="bg-navy-700/50 backdrop-blur-sm rounded-xl shadow-lg p-8 border border-navy-400/10">
+        <div className="max-w-md mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-8 text-white">Task Prioritization Assistant</h2>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="What would you like to prioritize today?"
+                className="w-full p-4 bg-navy-800/50 border border-navy-400/10 rounded-lg shadow-sm focus:ring-2 focus:ring-navy-300/50 focus:border-navy-300/50 outline-none text-lg text-white placeholder-navy-300"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-navy-500 text-white p-4 rounded-lg font-medium hover:bg-navy-400 disabled:bg-navy-600/50 disabled:text-navy-300 disabled:cursor-not-allowed transition-colors text-lg"
+            >
+              {loading ? "Loading Task Details..." : "Give me an ordered list"}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mt-6 bg-red-900/10 border border-red-400/10 rounded-xl p-6 text-center">
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Results Section */}
+      {response && (
+        <div className="mt-6 space-y-6">
+          {/* Task Summary */}
+          <div className="bg-navy-700/50 backdrop-blur-sm rounded-xl shadow-lg p-8 border border-navy-400/10">
+            <h2 className="text-2xl font-bold mb-4 text-white">Task Overview</h2>
+            <div className="prose max-w-none">
+              <p className="text-navy-100">{response.summary}</p>
+            </div>
+          </div>
+
+          {/* Task Details */}
+          <div className="bg-navy-700/50 backdrop-blur-sm rounded-xl shadow-lg p-8 border border-navy-400/10">
+            <h2 className="text-2xl font-bold mb-6 text-white">Task Details</h2>
+            <div className="space-y-4">
+              {response.tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="bg-navy-800/50 rounded-lg border border-navy-400/10 p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <h3 className="font-semibold text-lg text-white">{task.name}</h3>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
+                        task.custom_fields?.find((f) => f.name === "Priority")?.value === "High"
+                          ? "bg-red-500/20 text-red-300"
+                          : task.custom_fields?.find((f) => f.name === "Priority")?.value === "Medium"
+                            ? "bg-yellow-500/20 text-yellow-300"
+                            : "bg-green-500/20 text-green-300"
+                      }`}
+                    >
+                      {task.custom_fields?.find((f) => f.name === "Priority")?.value}
+                    </span>
+                  </div>
+                  {task.description && <p className="text-navy-100 mt-3 leading-relaxed">{task.description}</p>}
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-navy-200">Assignee</p>
+                      <p className="text-navy-100">Akriti Keswani</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-navy-200">Due Date</p>
+                      <p className="text-navy-100">{task.due_date}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-navy-200">Project</p>
+                      <p className="text-navy-100">Building AI Apps</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {task.priorityReasons.map((reason, index) => (
+                      <span
+                        key={index}
+                        className="inline-block bg-navy-600/50 text-navy-100 px-3 py-1 rounded-full text-sm"
+                      >
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <p className="text-red-600">{error}</p>
-          </div>
-        )}
-
-        {/* Results Section */}
-        {response && response.tasks.length > 0 && (
-          <div className="mt-6 space-y-6">
-            {/* Match Summary */}
-            <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200">
-              <div className="prose max-w-none">
-                <p className="text-slate-700 leading-relaxed text-center">{response.summary}</p>
-              </div>
-            </div>
-
-            {/* Task Details */}
-            <div className="bg-white rounded-xl shadow-lg p-8 border border-slate-200">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">Matching Task</h2>
-                <span className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium">
-                  {response.tasks[0].similarityPercentage}% Match
-                </span>
-              </div>
-              <div className="bg-slate-50 rounded-lg border border-slate-200 p-6">
-                <h3 className="font-semibold text-lg text-slate-900 mb-3">{response.tasks[0].name}</h3>
-                {response.tasks[0].description && (
-                  <p className="text-slate-600 leading-relaxed mb-4">{response.tasks[0].description}</p>
-                )}
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm text-slate-500">Assignee</p>
-                    <p className="text-slate-700 font-medium">Akriti Keswani</p>
-                  </div>
-                  {response.tasks[0].due_date && (
-                    <div>
-                      <p className="text-sm text-slate-500">Due Date</p>
-                      <p className="text-slate-700 font-medium">
-                        {new Date(response.tasks[0].due_date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-slate-500">Project</p>
-                    <p className="text-slate-700 font-medium">Building AI Apps</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {response.tasks[0].priorityReasons.map((reason, index) => (
-                    <span 
-                      key={index}
-                      className="inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm"
-                    >
-                      {reason}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* No Results Message */}
-        {response && response.tasks.length === 0 && (
-          <div className="mt-6 bg-white rounded-xl shadow-lg p-6 border border-slate-200 text-center">
-            <p className="text-slate-700">{response.summary}</p>
-            <p className="text-slate-500 mt-2">Try describing the task differently.</p>
-          </div>
-        )}
-      </div>
-    </main>
-  );
+      )}
+      {children}
+    </div>
+  )
 }
+
